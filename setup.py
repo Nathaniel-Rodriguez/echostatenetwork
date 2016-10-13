@@ -13,7 +13,8 @@ setup(name='echostatenetwork',
     install_requires=[
           'networkx',
           'numpy',
-          'matplotlib'
+          'matplotlib',
+          'scipy'
       ],
     include_package_data=True,
     zip_safe=False)
