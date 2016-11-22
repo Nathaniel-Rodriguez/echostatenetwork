@@ -15,7 +15,7 @@ class DESN(object):
     filtering, or pattern recognition, feedback is not advised.
     """
 
-    def __init__(self, reservoir, input_weights, neuron_type="tanh", 
+    def __init__(self, reservoir, input_weights=None, neuron_type="tanh", 
         output_type="sigmoid", init_state="zeros", neuron_pars={}, output_neuron_pars={}):
         """
         reservoir - NxN numpy array with weights for connected nodes
@@ -98,6 +98,18 @@ class DESN(object):
             
         return np.array(model_output)
 
+    def run_reservoir(self, time_steps, record=False):
+        """
+        Allows running the reservoir from the ICs without any input.
+        Doesn't require input weights
+        """
+
+        for i in range(time_steps):
+            self.current_state = self.activation_function(np.dot(self.reservoir, self.current_state))
+
+            if record:
+                self.network_history.append(self.current_state)
+
     def sigmoid(self, x, a=1.0, b=1.0, c=0.0, d=0.0, e=1.0):
         """
         numpy Vector/matrix friendly sigmoid function
@@ -149,59 +161,6 @@ class DESN(object):
         """
 
         self.output_weight_matrix = np.copy(weight_matrix)
-
-    # def MultiTrialTraining(self, array_input_time_series, array_target_output, cut=0, 
-    #         recall_time=None, cut_target_output=True, invert_target=False):
-    #     """
-    #     array_input_time_series: ts for each trial (Q=num trials): Q x T x K x 1
-    #     array_target_output: target output for each trial: Q x T x O x 1
-    #     """
-
-    #     if recall_time != None:
-    #         cut = recall_time
-    #     if invert_target:
-    #         array_target_output = self.output_function_signal_map(array_target_output)
-
-    #     print array_input_time_series.shape, array_target_output.shape
-    #     relevant_history = np.zeros(((array_input_time_series.shape[1]-cut) * array_input_time_series.shape[0],
-    #         array_input_time_series.shape[2] + self.current_state.shape[0]))
-    #     for i in xrange(array_input_time_series.shape[0]):
-    #         for j in xrange(array_input_time_series[i].shape[0] - 1):
-    #             self.Step(array_input_time_series[i][j], record=True)
-
-    #         esn_ts = np.array(self.network_history)[cut:]
-    #         cut_ts = array_input_time_series[i][cut:]
-    #         extended_state = np.concatenate( (esn_ts, cut_ts), axis=1)
-    #         extended_state =  np.reshape(extended_state, (extended_state.shape[0], extended_state.shape[1]))
-    #         relevant_history[i * (array_input_time_series.shape[1]-cut): (i+1) * (array_input_time_series.shape[1]-cut),:] \
-    #             = extended_state.copy()
-    #         self.Reset()
-
-    #     S = np.asmatrix(relevant_history)
-    #     if cut_target_output:
-    #         stacked_target_output = np.zeros(((array_target_output.shape[1]-cut) * array_target_output.shape[0], \
-    #             array_target_output.shape[2]))
-
-    #         for i in xrange(array_target_output.shape[0]):
-    #             target_output = array_target_output[i,cut:].copy() # Should be an t-cut x num_outputs matrix
-    #             target_output = np.reshape(target_output, (target_output.shape[0], target_output.shape[1]))
-    #             stacked_target_output[i * (array_target_output.shape[1]-cut): (i+1) * (array_target_output.shape[1]-cut),:] \
-    #                 = target_output.copy()
-    #     else:
-    #         stacked_target_output = np.zeros(((array_target_output.shape[1]) * array_target_output.shape[0], \
-    #             array_target_output.shape[2]))
-
-    #         for i in xrange(array_target_output.shape[0]):
-    #             target_output = array_target_output[i,:].copy() # Should be an t-cut x num_outputs matrix
-    #             target_output = np.reshape(target_output, (target_output.shape[0], target_output.shape[1]))
-    #             stacked_target_output[i * (array_target_output.shape[1]): (i+1) * (array_target_output.shape[1]),:] \
-    #                 = target_output.copy()                
-
-    #     D = np.asmatrix(stacked_target_output)
-    #     print S.shape, D.shape
-    #     solution, residuals, rank, sing = linalg.lstsq(S, D)
-    #     self.SetOutputWeights( solution ) 
-
 
     def MultiTrialTraining(self, seq_arr_input_time_series, seq_arr_target_output, cuts=0, 
             recall_times=None, cut_target_output=True, invert_target=False):
