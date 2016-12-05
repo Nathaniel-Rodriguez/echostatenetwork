@@ -241,7 +241,6 @@ class DESN(object):
         or if recall is enabled: then cut output recording till the recall time
         """
 
-
         if recall_time != None:
             cut = recall_time
 
@@ -304,6 +303,8 @@ class DESN(object):
             performance =  self.NormalizedRootMeanSquaredError(residuals, max_target, min_target)
         elif error_type == 'AE':
             performance =  self.AbsoluteError(residuals)
+        elif error_type == None:
+            performance = None
 
         if analysis_mode:
             return performance, prediction, target_output, full_output
