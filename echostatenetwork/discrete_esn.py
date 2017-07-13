@@ -100,7 +100,7 @@ class DESN(object):
 
     def run_reservoir(self, time_steps, record=False):
         """
-        Allows running the reservoir from the ICs without any input.
+        Allows running the reservoir from the ICs without input.
         Doesn't require input weights
         """
 
@@ -292,6 +292,7 @@ class DESN(object):
         # target_output = target_output[:,0]
         residuals = np.abs(prediction - target_output)
 
+        performance = None
         if error_type == 'NRMSE':
             if target_range != None:
                 min_target = target_range[0]
@@ -302,9 +303,7 @@ class DESN(object):
 
             performance =  self.NormalizedRootMeanSquaredError(residuals, max_target, min_target)
         elif error_type == 'AE':
-            performance =  self.AbsoluteError(residuals)
-        elif error_type == None:
-            performance = None
+            performance =  self.AbsoluteError(residuals)         
 
         if analysis_mode:
             return performance, prediction, target_output, full_output
