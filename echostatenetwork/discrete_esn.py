@@ -1,23 +1,137 @@
-# Nathaniel Rodriguez
-
-import numpy as np 
+import numpy as np
 from scipy import linalg
-import math
-import sys
 from functools import partial
-import scipy.stats as stats
+
+
+class Sigmoid:
+    """
+    Implements a general sigmoid functor that updates a given numpy array
+    in-place.
+    """
+    def __init__(self, a=1.0, b=1.0, c=0.0, d=0.0, e=1.0):
+        """
+        implements: a / (b + np.exp(-e * (x - c))) + d
+        """
+
+        self.a = a
+        self.b = b
+        self.c = c
+        self.d = d
+        self.e = e
+
+    def __call__(self, x):
+        """
+        Applies sigmoid in-place
+        :param x: A numpy array
+        :return: reference to x
+        """
+
+        np.subtract(x, self.c, out=x)
+        np.multiply(x, -self.e, out=x)
+        np.exp(x, out=x)
+        np.add(x, self.b, out=x)
+        np.divide(self.a, x, out=x)
+        np.add(x, self.d, out=x)
+
+        return x
+
+
+class InvertedSigmoid(Sigmoid):
+    """
+    Implements an inverted sigmoid using numpy arrays in-place
+    """
+
+    def __call__(self, x):
+        """
+        Applies inverted sigmoid in-place
+        :param x: A numpy array
+        :return: reference to x
+        """
+
+        np.subtract(x, self.d, out=x)
+        np.divide(self.a, x, out=x)
+        np.subtract(x, self.b, out=x)
+        np.log(x, out=x)
+        np.divide(x, -self.e, out=x)
+        np.add(x, self.c, out=x)
+
+        return x
+
+
+class Tanh:
+    """
+    Implements the tanh function. Just calls np.tanh inplace on numpy array
+    """
+    def __call__(self, x):
+        """
+        in-place tanh operation
+        :param x: a numpy array
+        :return: reference to same array
+        """
+        np.tanh(x, out=x)
+        return x
+
+
+class Identity:
+    """
+    Returns the same array
+    """
+    def __call__(self, x):
+        """
+        :param x: numpy array
+        :return: returns reference to same array
+        """
+        return x
+
+
+class Heaviside:
+    """
+    Implements the heaviside step function in-place.
+    Requires allocating an array of the same shape as the one it is operating
+    on in order to take advantage of c-speed comparisons in numpy.
+
+    Returns an array with values that are either 0 or newval, depending on the
+    threshold.
+    """
+    def __init__(self, shape, threshold=0.0, newval=1.0):
+        """
+        If below threshold, clamps to 0.
+        If above, clamps to newval
+        :param shape: shape of numpy array
+        :param threshold: threshold between min/max value
+        :param newval: clamped max value
+        """
+        self.bool_array = np.full(shape, True, dtype=bool)
+        self.threshold = threshold
+        self.newval = newval
+
+    def __call__(self, x):
+        """
+        :param x: numpy array of shape == self.shape
+        :return: reference to x
+        """
+
+        np.greater(x, self.threshold, out=self.bool_array)
+        x[:] = 0
+        np.putmask(x, self.bool_array, self.newval)
+
+        return x
 
 
 class DESN(object):
     """
     This is a discrete non-feedback ESN that uses linear regression learning.
-    It can be expanded to include feedback, but this would require using a batch or online learning algorithm.
-    Note: According to Jaeger, feedback is only needed for pattern generating ESNs. For time-series prediction, control,
-    filtering, or pattern recognition, feedback is not advised.
+    It can be expanded to include feedback, but this would require using a batch
+    or online learning algorithm.
+
+    Note: According to Jaeger, feedback is only needed for pattern generating ESNs.
+    For time-series prediction, control, filtering, or pattern recognition,
+    feedback is not advised.
     """
 
     def __init__(self, reservoir, input_weights=None, neuron_type="tanh", 
-        output_type="sigmoid", init_state="zeros", neuron_pars={}, output_neuron_pars={}):
+                 output_type="sigmoid", init_state="zeros", neuron_pars={}, 
+                 output_neuron_pars={}):
         """
         reservoir - NxN numpy array with weights for connected nodes
         input_weights - NxK numpy array with input signals
@@ -35,8 +149,6 @@ class DESN(object):
             self.activation_function = self.tanh
         elif self.neuron_type == "sigmoid":
             self.activation_function = partial(self.sigmoid, **neuron_pars)
-        elif self.neuron_type == "RLU":
-            self.activation_function = partial(self.rectified_linear_unit, **neuron_pars)
         elif self.neuron_type == "heaviside":
             self.activation_function = partial(self.heaviside, **neuron_pars)
         # Set neuron types (output neuron)
@@ -52,13 +164,10 @@ class DESN(object):
 
         # Generate initial system state
         self.init_state = init_state
-        self.current_state = self.GenerateInitialState(self.init_state)
-        self.network_history = [ ]
+        self.current_state = self.generate_initial_state(self.init_state)
+        self.network_history = []
 
-    # def Noise(self):
-    #     return self.weiner_var * np.random.normal(loc=0.0, scale=1.0, size=(self.num_neurons,1))
-
-    def GenerateInitialState(self, setup="zeros"):
+    def generate_initial_state(self, setup="zeros"):
         """
         Sets all initial states 
         """
@@ -68,12 +177,12 @@ class DESN(object):
         else:
             return np.random.uniform(setup[0],setup[1],size=(self.num_neurons, 1))
 
-    def Reset(self):
+    def reset(self):
 
-        self.current_state = self.GenerateInitialState(self.init_state)
+        self.current_state = self.generate_initial_state(self.init_state)
         self.network_history = [ ]
 
-    def Step(self, input_vector, record=False):
+    def step(self, input_vector, record=False):
         """
         input_vector - numpy array of dimensions Kx1
         """
@@ -82,66 +191,41 @@ class DESN(object):
         if record:
             self.network_history.append(self.current_state)
 
-    def Response(self, input_vector):
+    def response(self, input_vector):
         """
         Calculate the networks repsonse given an input vector
         """
         return self.output_function(np.dot(np.transpose(self.output_weight_matrix), 
             np.concatenate((self.current_state, input_vector), axis=0)))
 
-    def RunModel(self, input_time_series, record=False):
+    def run(self, input_time_series=None, record=False, num_iter=None):
+        """
+        :param input_time_series: Input time series
+        :param record: Whether to record output
+        :param num_iter: If not None, runs till number of iterations 
+        :return: 
+        """
 
         # Evaluate for time series input
         model_output = []
-        for i in xrange(input_time_series.shape[0]):
-            self.Step(input_time_series[i], record)
-            model_output.append(self.Response(input_time_series[i]))
+        for i in range(input_time_series.shape[0]):
+            self.step(input_time_series[i], record)
+            model_output.append(self.response(input_time_series[i]))
+            
+        # If not time-series, run step without input
+        if (input_time_series is None) and not (num_iter is None):
+            for i in range(time_steps):
+                self.current_state = self.activation_function(
+                    np.dot(self.reservoir, self.current_state))
+
+                if record:
+                    self.network_history.append(self.current_state)
+
+        else:
+            raise NotImplementedError("DESN run doesn't support these arguments")
+
             
         return np.array(model_output)
-
-    def run_reservoir(self, time_steps, record=False):
-        """
-        Allows running the reservoir from the ICs without input.
-        Doesn't require input weights
-        """
-
-        for i in range(time_steps):
-            self.current_state = self.activation_function(np.dot(self.reservoir, self.current_state))
-
-            if record:
-                self.network_history.append(self.current_state)
-
-    def sigmoid(self, x, a=1.0, b=1.0, c=0.0, d=0.0, e=1.0):
-        """
-        numpy Vector/matrix friendly sigmoid function
-        """
-        return a / (b + np.exp(-e*(x-c))) + d
-
-    def inv_sigmoid(self, x, a=1.0, b=1.0, c=0.0, d=0.0, e=1.0):
-
-        return - np.log(a / (x-d) - b) / e + c
-
-    def tanh(self, x):
-        """
-        """
-        return np.tanh(x)
-
-    def identity(self, x):
-        """
-        """
-        return x
-
-    def rectified_linear_unit(self, x, threshold=0.0, scale=1.0):
-        """
-        """
-
-        return scale * stats.threshold(x, threshmin=threshold, newval=0)
-
-    def heaviside(self, x, threshold=0.0, newval=1.0):
-        """
-        """
-
-        return newval * (x > threshold)
 
     def output_function_signal_map(target):
         """
@@ -182,9 +266,9 @@ class DESN(object):
         index_nocut = lambda x, k: int(np.sum([x[v].shape[0] for v in range(k)]))
 
         relevant_history = np.zeros((data_length, seq_arr_input_time_series[0].shape[1] + self.current_state.shape[0]))
-        for i in xrange(num_trials):
-            for j in xrange(seq_arr_input_time_series[i].shape[0]):
-                self.Step(seq_arr_input_time_series[i][j], record=True)
+        for i in range(num_trials):
+            for j in range(seq_arr_input_time_series[i].shape[0]):
+                self.step(seq_arr_input_time_series[i][j], record=True)
 
             esn_ts = np.array(self.network_history)[cuts[i]:]
             cut_ts = seq_arr_input_time_series[i][cuts[i]:]
@@ -192,14 +276,14 @@ class DESN(object):
             extended_state =  np.reshape(extended_state, (extended_state.shape[0], extended_state.shape[1]))
             relevant_history[ index(seq_arr_input_time_series, i, cuts): index(seq_arr_input_time_series, i+1, cuts),:] \
                 = extended_state.copy()
-            self.Reset()
+            self.reset()
 
         S = np.asmatrix(relevant_history)
         if cut_target_output:
             output_length = np.sum([ arr.shape[0]-cuts[i] for i, arr in enumerate(seq_arr_target_output) ])
             stacked_target_output = np.zeros((output_length, seq_arr_target_output[0].shape[1]))
 
-            for i in xrange(num_trials):
+            for i in range(num_trials):
                 target_output = seq_arr_target_output[i][cuts[i]:].copy() # Should be an t-cut x num_outputs matrix
                 target_output = np.reshape(target_output, (target_output.shape[0], target_output.shape[1]))
                 stacked_target_output[ index(seq_arr_target_output, i, cuts) : index(seq_arr_target_output, i+1, cuts),:] \
@@ -208,7 +292,7 @@ class DESN(object):
             output_length = np.sum([ arr.shape[0] for arr in seq_arr_target_output ])
             stacked_target_output = np.zeros((output_length, seq_arr_target_output[0].shape[1]))
 
-            for i in xrange(num_trials):
+            for i in range(num_trials):
                 target_output = seq_arr_target_output[i][:].copy() # Should be an t-cut x num_outputs matrix
                 target_output = np.reshape(target_output, (target_output.shape[0], target_output.shape[1]))
                 stacked_target_output[ index_nocut(seq_arr_target_output, i): index_nocut(seq_arr_target_output, i+1),:] \
@@ -229,8 +313,8 @@ class DESN(object):
             target_output = self.output_function_signal_map(target_output)
 
         # Run network for full time-series
-        for i in xrange(input_time_series.shape[0]):
-            self.Step(input_time_series[i], record=True)
+        for i in range(input_time_series.shape[0]):
+            self.step(input_time_series[i], record=True)
         
         return self.EvaluateOutputWeights(input_time_series, target_output, cut, recall_time, cut_target_output)
 
@@ -274,7 +358,7 @@ class DESN(object):
     def Predict(self, input_time_series, target_output, cut, recall_time=None, cut_target_output=True,
         target_range=None, error_type='NRMSE', analysis_mode=False):
 
-        prediction = self.RunModel(input_time_series, record=analysis_mode)
+        prediction = self.run(input_time_series, record=analysis_mode)
 
         if analysis_mode:
             full_output = prediction.copy()
