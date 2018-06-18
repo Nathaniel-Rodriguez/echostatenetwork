@@ -7,6 +7,7 @@ import sys
 from functools import partial
 import scipy.stats as stats
 
+
 class DESN(object):
     """
     This is a discrete non-feedback ESN that uses linear regression learning.
@@ -148,12 +149,12 @@ class DESN(object):
 
         try:
             if self.output_type == 'sigmoid':
-                return inv_sigmoid(target, **self.output_neuron_pars)
+                return self.inv_sigmoid(target, **self.output_neuron_pars)
             elif self.output_type == 'tanh':
                 return np.arctanh(target)
 
         except TypeError:
-            return [ inv_sigmoid(part, **self.output_neuron_pars) if self.output_type == 'sigmoid'
+            return [ self.inv_sigmoid(part, **self.output_neuron_pars) if self.output_type == 'sigmoid'
                 else np.arctanh(part) for part in target ]
 
     def SetOutputWeights(self, weight_matrix):

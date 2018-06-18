@@ -10,6 +10,7 @@
 
 # Sublime project file
 *.sublime*
+/.idea
 
 # remove cache files
 /*__pycache__
