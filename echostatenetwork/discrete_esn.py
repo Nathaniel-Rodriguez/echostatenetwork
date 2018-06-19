@@ -139,10 +139,27 @@ class DESN(object):
 
     The DESN must be trained on input before an output weight matrix is generated.
 
+    Available activation functions:
+        sigmoid {a,b,c,d,e}
+        invertedsigmoid {a,b,c,d,e}
+        arctanh {}
+        tanh {}
+        identity {}
+        heaviside {(num_neurons, 1), threshold, newval}
+
     Note: According to Jaeger, feedback is only needed for pattern generating ESNs.
     For time-series prediction, control, filtering, or pattern recognition,
     feedback is not advised.
     """
+
+    ActivationFunctions = {
+        'sigmoid' : Sigmoid,
+        'invertedsigmoid': InvertedSigmoid,
+        'arctanh': ArcTanh,
+        'tanh': Tanh,
+        'identity': Identity,
+        'heaviside': Heaviside
+    }
 
     def __init__(self, reservoir, input_weights=None, neuron_type="tanh", 
                  output_type="sigmoid", initial_state="zeros", neuron_pars=None,
@@ -190,27 +207,12 @@ class DESN(object):
         # Set neuron types (reservoir)
         self.neuron_type = neuron_type
         self.neuron_pars = neuron_pars
-        if self.neuron_type == "tanh":
-            self.activation_function = Tanh()
-        elif self.neuron_type == "sigmoid":
-            self.activation_function = Sigmoid(**neuron_pars)
-        elif self.neuron_type == "heaviside":
-            self.activation_function = Heaviside((self.num_neurons, 1),
-                                                 **neuron_pars)
+        self.activation_function = DESN.ActivationFunctions[neuron_type.lower()](**neuron_pars)
 
         # Set neuron types (output neuron)
         self.output_type = output_type
         self.output_neuron_pars = output_neuron_pars
-        if self.output_type == "tanh":
-            self.output_function = Tanh()
-        elif self.output_type == "sigmoid":
-            self.output_function = Sigmoid(**output_neuron_pars)
-        elif self.output_type == "identity":
-            self.output_function = Identity()
-        elif self.output_type == "heaviside":
-            self.output_function = Heaviside((self.num_neurons
-                                              + self.num_inputs, 1),
-                                             **output_neuron_pars)
+        self.output_function = DESN.ActivationFunctions[output_type.lower()](**output_neuron_pars)
 
         # RNG for initial state
         if seed is None:
