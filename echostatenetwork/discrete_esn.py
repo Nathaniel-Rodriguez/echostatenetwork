@@ -135,7 +135,7 @@ class Heaviside:
         return x
 
 
-class DiscreteEchoStateNetwork(object):
+class DiscreteEchoStateNetwork:
     """
     This is a discrete non-feedback ESN that uses linear regression learning.
     It can be expanded to include feedback, but this would require using a batch
