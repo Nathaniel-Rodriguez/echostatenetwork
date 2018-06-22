@@ -188,7 +188,8 @@ class DiscreteEchoStateNetwork:
         'arctanh': ArcTanh,
         'tanh': Tanh,
         'identity': Identity,
-        'heaviside': Heaviside
+        'heaviside': Heaviside,
+        'linear': Linear
     }
 
     def __init__(self, reservoir, input_weights=None, neuron_type="tanh", 
