@@ -1,1 +1,1 @@
-from .discrete_esn import DESN
+from .discrete_esn import DiscreteEchoStateNetwork

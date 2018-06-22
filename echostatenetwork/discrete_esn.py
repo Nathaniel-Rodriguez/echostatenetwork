@@ -2,6 +2,10 @@ import numpy as np
 from scipy import linalg
 
 
+DEFAULT_FLOAT = np.float32
+DEFAULT_INT = np.int64
+
+
 class Sigmoid:
     """
     Implements a general sigmoid functor that updates a given numpy array
@@ -131,13 +135,14 @@ class Heaviside:
         return x
 
 
-class DESN(object):
+class DiscreteEchoStateNetwork(object):
     """
     This is a discrete non-feedback ESN that uses linear regression learning.
     It can be expanded to include feedback, but this would require using a batch
     or online learning algorithm.
 
-    The DESN must be trained on input before an output weight matrix is generated.
+    The DiscreteEchoStateNetwork must be trained on input before an output weight
+    matrix is generated.
 
     Available activation functions:
         sigmoid {a,b,c,d,e}
@@ -163,10 +168,10 @@ class DESN(object):
 
     def __init__(self, reservoir, input_weights=None, neuron_type="tanh", 
                  output_type="sigmoid", initial_state="zeros", neuron_pars=None,
-                 output_neuron_pars=None, seed=None, record=False):
+                 output_neuron_pars=None, seed=None, record=False, dtype=None):
         """
         :param reservoir: NxN numpy array
-        :param input_weights: NxK numpy array
+        :param input_weights: NxK numpy array, or None. Default: None
         :param neuron_type: string (tanh, sigmoid, heaviside)
         :param output_type: string (tanh, sigmoid, heaviside, identity)
         :param initial_state: string (zeros, uniform)
@@ -176,6 +181,7 @@ class DESN(object):
         :param seed: Seed for random initialization, if used (defaults to
             the default of numpy RandomState)
         :param record: specifies whether to record state history during a run.
+        :param dtype: type of numpy arrays used. Default: DEFAULT_FLOAT
 
         Size key:
         N = # neurons in reservoir
@@ -186,6 +192,8 @@ class DESN(object):
         O = # of output dimensions
         """
 
+        if dtype is None:
+            self.dtype = DEFAULT_FLOAT
         if neuron_pars is None:
             neuron_pars = {}
         if output_neuron_pars is None:
@@ -193,26 +201,34 @@ class DESN(object):
 
         if not isinstance(reservoir, np.ndarray):
             raise NotImplementedError("Reservoir needs to be a numpy array")
-        if not isinstance(input_weights, np.ndarray):
-            raise NotImplementedError("Input weights need to be a numpy array")
+
+        if not (input_weights is None) and not isinstance(input_weights, np.ndarray):
+            raise NotImplementedError("Input weights need to be a numpy "
+                                      "array or None")
 
         # Weights
+        self.dtype = dtype
         self.reservoir = reservoir  # NxN
         self.input_weights = input_weights  # NxK
         self.num_neurons = self.reservoir.shape[0]  # N
-        self.num_inputs = self.input_weights.shape[1]  # K
+        if self.input_weights is None:
+            self.num_inputs = 0
+        else:
+            self.num_inputs = self.input_weights.shape[1]  # K
         self.record = record  # T/F
         self.initial_state = initial_state  # T/F
 
         # Set neuron types (reservoir)
         self.neuron_type = neuron_type
         self.neuron_pars = neuron_pars
-        self.activation_function = DESN.ActivationFunctions[neuron_type.lower()](**neuron_pars)
+        self.activation_function = DiscreteEchoStateNetwork.ActivationFunctions[
+            neuron_type.lower()](**neuron_pars)
 
         # Set neuron types (output neuron)
         self.output_type = output_type
         self.output_neuron_pars = output_neuron_pars
-        self.output_function = DESN.ActivationFunctions[output_type.lower()](**output_neuron_pars)
+        self.output_function = DiscreteEchoStateNetwork.ActivationFunctions[
+            output_type.lower()](**output_neuron_pars)
 
         # RNG for initial state
         if seed is None:
@@ -224,10 +240,11 @@ class DESN(object):
         self.iteration = 0
 
         # An Nx1 array
-        self.input_state = np.zeros((self.num_neurons, 1))
+        self.input_state = np.zeros((self.num_neurons, 1), dtype=self.dtype)
 
         # An Nx1 array
-        self.state = self.generate_initial_state(np.zeros((self.num_neurons, 1)))
+        self.state = self.generate_initial_state(np.zeros((self.num_neurons, 1),
+                                                          dtype=self.dtype))
 
         # Will be a TxNx1 array
         self.history = None
@@ -238,7 +255,8 @@ class DESN(object):
         self.output_weight_matrix_t = None
 
         # (N+K)x1 state concatenated with inputs
-        self.full_state = np.zeros((self.num_neurons + self.num_inputs, 1))
+        self.full_state = np.zeros((self.num_neurons + self.num_inputs, 1),
+                                   dtype=self.dtype)
 
         # Output record will be an TxO array
         self.output = None
@@ -332,11 +350,13 @@ class DESN(object):
         if hasattr(self, "output_weight_matrix_t"):
             # Has shape TxO
             self.output = np.zeros((num_iter,
-                                    self.output_weight_matrix_t.shape(0)))
+                                    self.output_weight_matrix_t.shape(0)),
+                                   dtype=self.dtype)
 
         # Initialize the history for this run
         if self.record:
-            self.history = np.zeros((num_iter, self.num_neurons, 1))
+            self.history = np.zeros((num_iter, self.num_neurons, 1),
+                                    dtype=self.dtype)
             
         # If not time-series, run step without input
         if input_time_series is None:
@@ -449,7 +469,8 @@ class DESN(object):
         # With cut introduced, the stacked full history is a Sx(N+K) matrix
         # where S=stacked length
         stacked_full_history = np.zeros((stacked_time_series_length,
-                                         self.num_inputs + self.num_neurons))
+                                         self.num_inputs + self.num_neurons),
+                                        dtype=self.dtype)
         # Go through each trail, generate output and stack the C length axis onto the S
         # axis of the stacked array
         for trial_num in range(num_trials):
@@ -476,7 +497,8 @@ class DESN(object):
 
         # Stack target output:
         num_outputs = target_output[0].shape[1]
-        stacked_target_output = np.zeros(stacked_time_series_length, num_outputs)  # SxO
+        stacked_target_output = np.zeros((stacked_time_series_length, num_outputs),
+                                         dtype=self.dtype)  # SxO
         for trial_num in range(num_trials):
             cut_target_output = target_output[trial_num][cuts[trial_num]:]  # CxOx1
             stacked_target_output[index(target_output, trial_num, cuts):
