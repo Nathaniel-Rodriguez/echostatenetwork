@@ -6,6 +6,31 @@ DEFAULT_FLOAT = np.float32
 DEFAULT_INT = np.int64
 
 
+class Linear:
+    """
+    Implements a linear functor that updates based on a linear function
+    """
+    def __init__(self, slope=1.0, bias=0.0):
+        """
+        y = slope * x + bias
+        :param slope: scalar
+        :param bias: scalar
+        """
+        self.slope = slope
+        self.bias = bias
+
+    def __call__(self, x):
+        """
+        Applies in-place linear activation
+        :param x: numpy array
+        :return: reference to x
+        """
+
+        np.multiply(x, self.slope, out=x)
+        np.add(x, self.bias, out=x)
+        return x
+
+
 class Sigmoid:
     """
     Implements a general sigmoid functor that updates a given numpy array
@@ -158,7 +183,7 @@ class DiscreteEchoStateNetwork:
     """
 
     ActivationFunctions = {
-        'sigmoid' : Sigmoid,
+        'sigmoid': Sigmoid,
         'invertedsigmoid': InvertedSigmoid,
         'arctanh': ArcTanh,
         'tanh': Tanh,
@@ -172,7 +197,7 @@ class DiscreteEchoStateNetwork:
         """
         :param reservoir: NxN numpy array
         :param input_weights: NxK numpy array, or None. Default: None
-        :param neuron_type: string (tanh, sigmoid, heaviside)
+        :param neuron_type: string (tanh, sigmoid, heaviside, linear)
         :param output_type: string (tanh, sigmoid, heaviside, identity)
         :param initial_state: Distribution, Default: Zeros
             For Distribution class see reservoirgen
