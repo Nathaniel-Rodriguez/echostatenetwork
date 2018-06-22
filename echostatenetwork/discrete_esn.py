@@ -365,13 +365,6 @@ class DiscreteEchoStateNetwork:
         if num_iter is None:
             num_iter = len(input_time_series)
 
-        # Initialize the output for this run
-        if hasattr(self, "output_weight_matrix_t"):
-            # Has shape TxO
-            self.output = np.zeros((num_iter,
-                                    self.output_weight_matrix_t.shape(0)),
-                                   dtype=self.dtype)
-
         # Initialize the history for this run
         if self.record:
             self.history = np.zeros((num_iter, self.num_neurons, 1),
@@ -385,6 +378,13 @@ class DiscreteEchoStateNetwork:
 
         # Evaluate for time series input
         else:
+            # Initialize the output for this run
+            if hasattr(self, "output_weight_matrix_t"):
+                # Has shape TxO
+                self.output = np.zeros((num_iter,
+                                        self.output_weight_matrix_t.shape(0)),
+                                       dtype=self.dtype)
+
             for i in range(num_iter):
                 self.iteration = i
                 self.step(input_time_series[i])
