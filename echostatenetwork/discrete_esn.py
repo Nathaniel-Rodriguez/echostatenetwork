@@ -167,19 +167,18 @@ class DiscreteEchoStateNetwork(object):
     }
 
     def __init__(self, reservoir, input_weights=None, neuron_type="tanh", 
-                 output_type="sigmoid", initial_state="zeros", neuron_pars=None,
-                 output_neuron_pars=None, seed=None, record=False, dtype=None):
+                 output_type="sigmoid", initial_state=None, neuron_pars=None,
+                 output_neuron_pars=None, record=False, dtype=None):
         """
         :param reservoir: NxN numpy array
         :param input_weights: NxK numpy array, or None. Default: None
         :param neuron_type: string (tanh, sigmoid, heaviside)
         :param output_type: string (tanh, sigmoid, heaviside, identity)
-        :param initial_state: string (zeros, uniform)
+        :param initial_state: Distribution, Default: Zeros
+            For Distribution class see reservoirgen
         :param neuron_pars: dict of parameters for neuron. Default: {}
         :param output_neuron_pars: dict of parameters for output neuron.
             Default: {}
-        :param seed: Seed for random initialization, if used (defaults to
-            the default of numpy RandomState)
         :param record: specifies whether to record state history during a run.
         :param dtype: type of numpy arrays used. Default: DEFAULT_FLOAT
 
@@ -216,7 +215,7 @@ class DiscreteEchoStateNetwork(object):
         else:
             self.num_inputs = self.input_weights.shape[1]  # K
         self.record = record  # T/F
-        self.initial_state = initial_state  # T/F
+        self.initial_state = initial_state
 
         # Set neuron types (reservoir)
         self.neuron_type = neuron_type
@@ -229,12 +228,6 @@ class DiscreteEchoStateNetwork(object):
         self.output_neuron_pars = output_neuron_pars
         self.output_function = DiscreteEchoStateNetwork.ActivationFunctions[
             output_type.lower()](**output_neuron_pars)
-
-        # RNG for initial state
-        if seed is None:
-            self.np_rng = np.random.RandomState()
-        else:
-            self.np_rng = np.random.RandomState(seed)
 
         # Initialize system, except for history
         self.iteration = 0
@@ -263,16 +256,16 @@ class DiscreteEchoStateNetwork(object):
 
     def generate_initial_state(self, x):
         """
-        Sets all initial states 
+        Sets all initial states
+        self.initial_state should be either None, or a Distribution or other
+        callable object that can be given a size argument
         """
 
-        if self.initial_state == "zeros":
+        if self.initial_state is None:
             x[:] = 0
             return x
         else:
-            x[:] = self.np_rng.uniform(self.initial_state[0],
-                                       self.initial_state[1],
-                                       size=(self.num_neurons, 1))
+            x[:] = self.initial_state(size=(self.num_neurons, 1))
             return x
 
     def reset(self):
