@@ -193,7 +193,7 @@ class DiscreteEchoStateNetwork:
     }
 
     def __init__(self, reservoir, input_weights=None, neuron_type="tanh", 
-                 output_type="sigmoid", initial_state=None, neuron_pars=None,
+                 output_type="tanh", initial_state=None, neuron_pars=None,
                  output_neuron_pars=None, record=False, dtype=None):
         """
         :param reservoir: NxN numpy array
