@@ -568,7 +568,8 @@ class DiscreteEchoStateNetwork:
         :param error_type: 'NRMSE' or 'AE' (absolute error)
         :param analysis_mode: T/F Specifies whether to return all outputs.
             Default: False
-        :return:
+        :return: performance
+            or performance, cut_prediction, target_output, prediction
         """
 
         # TxO
