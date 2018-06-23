@@ -1,21 +1,37 @@
 import numpy as np
 from scipy import linalg
+from abc import ABC
 
 
 DEFAULT_FLOAT = np.float32
 DEFAULT_INT = np.int64
 
 
-class Linear:
+class BaseActivator(ABC):
+    """
+    Defines the interface for the Activator class
+    """
+
+    @abstractmethod
+    def __call__(self, x):
+        """
+        Should take a numpy array and return a reference to the same array.
+        All operations should be in-place
+        """
+        pass
+
+class Linear(BaseActivator):
     """
     Implements a linear functor that updates based on a linear function
     """
-    def __init__(self, slope=1.0, bias=0.0):
+    def __init__(self, slope=1.0, bias=0.0, **kwargs):
         """
         y = slope * x + bias
         :param slope: scalar
         :param bias: scalar
         """
+        super().__init__(**kwargs)
+
         self.slope = slope
         self.bias = bias
 
@@ -31,15 +47,16 @@ class Linear:
         return x
 
 
-class Sigmoid:
+class Sigmoid(BaseActivator):
     """
     Implements a general sigmoid functor that updates a given numpy array
     in-place.
     """
-    def __init__(self, a=1.0, b=1.0, c=0.0, d=0.0, e=1.0):
+    def __init__(self, a=1.0, b=1.0, c=0.0, d=0.0, e=1.0, **kwargs):
         """
         implements: a / (b + np.exp(-e * (x - c))) + d
         """
+        super().__init__(**kwargs)
 
         self.a = a
         self.b = b
@@ -86,7 +103,7 @@ class InvertedSigmoid(Sigmoid):
         return x
 
 
-class ArcTanh:
+class ArcTanh(BaseActivator):
     """
     Implements arctanh function. Just calls np.arctanh inplace on numpy array
     """
@@ -100,7 +117,7 @@ class ArcTanh:
         return x
 
 
-class Tanh:
+class Tanh(BaseActivator):
     """
     Implements the tanh function. Just calls np.tanh inplace on numpy array
     """
@@ -160,7 +177,54 @@ class Heaviside:
         return x
 
 
-class DiscreteEchoStateNetwork:
+class BaseEchoStateNetwork(ABC):
+    """
+    Defines the interface for the EchoStateNetwork class
+    """
+
+    ActivationFunctions = {
+        'sigmoid': Sigmoid,
+        'invertedsigmoid': InvertedSigmoid,
+        'arctanh': ArcTanh,
+        'tanh': Tanh,
+        'identity': Identity,
+        'heaviside': Heaviside,
+        'linear': Linear
+    }
+
+    @abstractmethod
+    def reset(self):
+        """
+        Resets the state of the neural network, along with any other variables
+        needed in order to do a fresh run again.
+        """
+        pass
+
+    @abstractmethod
+    def run(self, input_time_series=None, num_iter=None, record=False,
+            output=False):
+        """
+        A method to run the neural network either from initial conditions or
+        given some time-series.
+        :param input_time_series: An optional input time-series
+        :param num_iter: An optional number of iterations to run for
+        :param record: Whether to record the history of the reservoir states
+        :param output: Whether to calculate the output of the reservoir
+        :return: output (if true)
+        """
+        pass
+
+    @abstractmethod
+    def train(self, input_time_series, target_output, *args, **kwargs):
+        """
+        sets the output weights of the ESN given # trials of input
+        :param input_time_series: A list or array of input time-series
+        :param target_output: A list or array of target time-series
+        """
+        pass
+
+
+class DiscreteEchoStateNetwork(BaseEchoStateNetwork):
     """
     This is a discrete non-feedback ESN that uses linear regression learning.
     It can be expanded to include feedback, but this would require using a batch
@@ -182,19 +246,9 @@ class DiscreteEchoStateNetwork:
     feedback is not advised.
     """
 
-    ActivationFunctions = {
-        'sigmoid': Sigmoid,
-        'invertedsigmoid': InvertedSigmoid,
-        'arctanh': ArcTanh,
-        'tanh': Tanh,
-        'identity': Identity,
-        'heaviside': Heaviside,
-        'linear': Linear
-    }
-
     def __init__(self, reservoir, input_weights=None, neuron_type="tanh", 
                  output_type="tanh", initial_state=None, neuron_pars=None,
-                 output_neuron_pars=None, record=False, dtype=None):
+                 output_neuron_pars=None, dtype=None, **kwargs):
         """
         :param reservoir: NxN numpy array
         :param input_weights: NxK numpy array, or None. Default: None
@@ -205,7 +259,6 @@ class DiscreteEchoStateNetwork:
         :param neuron_pars: dict of parameters for neuron. Default: {}
         :param output_neuron_pars: dict of parameters for output neuron.
             Default: {}
-        :param record: specifies whether to record state history during a run.
         :param dtype: type of numpy arrays used. Default: DEFAULT_FLOAT
 
         Size key:
@@ -216,6 +269,7 @@ class DiscreteEchoStateNetwork:
         S = time step stack of all trials: e.g. for 3 trials S = 3*C
         O = # of output dimensions
         """
+        super().__init__(**kwargs)
 
         if dtype is None:
             self.dtype = DEFAULT_FLOAT
@@ -240,7 +294,6 @@ class DiscreteEchoStateNetwork:
             self.num_inputs = 0
         else:
             self.num_inputs = self.input_weights.shape[1]  # K
-        self.record = record  # T/F
         self.initial_state = initial_state
 
         # Set neuron types (reservoir)
@@ -303,7 +356,7 @@ class DiscreteEchoStateNetwork:
         self.input_state[:] = 0.0
         self.full_state[:] = 0.0
 
-    def step(self, input_array):
+    def step(self, input_array, record=False):
         """
         Ideally the view should be over the major axis, which for numpy is rows.
         :param input_array: a Kx1 numpy array
@@ -314,10 +367,10 @@ class DiscreteEchoStateNetwork:
         np.add(self.input_state, self.state, out=self.state)
         self.activation_function(self.state)
 
-        if self.record:  # Assigns values from current state to history
+        if record:  # Assigns values from current state to history
             self.history[self.iteration][:] = self.state[:]
 
-    def no_input_step(self):
+    def no_input_step(self, record=False):
         """
         A stepping function that doesn't require input. Just calls the reservoir
         on itself.
@@ -326,7 +379,7 @@ class DiscreteEchoStateNetwork:
         np.dot(self.reservoir, self.state, out=self.state)
         self.activation_function(self.state)
 
-        if self.record:  # Assigns values from current state to history
+        if record:  # Assigns values from current state to history
             self.history[self.iteration][:] = self.state[:]
 
     def response(self, input_array):
@@ -342,7 +395,7 @@ class DiscreteEchoStateNetwork:
         np.dot(self.output_weight_matrix_t, self.full_state, out=self.full_state)
         return self.output_function(self.full_state)
 
-    def run(self, input_time_series=None, num_iter=None, record=None,
+    def run(self, input_time_series=None, num_iter=None, record=False,
             output=False):
         """
         Re-initializes the history
@@ -359,14 +412,12 @@ class DiscreteEchoStateNetwork:
         :note: Response is not evaluated when no time-series is given, just a
             zeroed array is returned
         """
-        if not (record is None):
-            self.record = record
 
         if num_iter is None:
             num_iter = len(input_time_series)
 
         # Initialize the history for this run
-        if self.record:
+        if record:
             self.history = np.zeros((num_iter, self.num_neurons, 1),
                                     dtype=self.dtype)
             
@@ -374,7 +425,7 @@ class DiscreteEchoStateNetwork:
         if input_time_series is None:
             for i in range(num_iter):
                 self.iteration = i
-                self.no_input_step()
+                self.no_input_step(record=record)
 
         # Evaluate for time series input
         else:
@@ -387,7 +438,7 @@ class DiscreteEchoStateNetwork:
 
             for i in range(num_iter):
                 self.iteration = i
-                self.step(input_time_series[i])
+                self.step(input_time_series[i], record=record)
                 if output:
                     self.output[i, :] = np.squeeze(self.response(input_time_series[i]),
                                                    axis=1)
@@ -422,7 +473,8 @@ class DiscreteEchoStateNetwork:
         # memory layout.
         self.output_weight_matrix_t = weight_matrix.transpose().copy()
 
-    def train(self, input_time_series, target_output, cuts=None, invert_target=False):
+    def train(self, input_time_series, target_output, cuts=None, invert_target=False,
+              cut_output=False):
         """
         Trains the agent using either an single time series input or multiple
         time-series.
@@ -446,12 +498,16 @@ class DiscreteEchoStateNetwork:
         :param invert_target: Specifies whether to invert the target values for
             training. Maybe necessary for tanh and sigmoid functions to convert
             to a linear space for training. Default: False
+        :param cut_output: true/false, determine whether to apply the cuts on the
+            input time-series to the target time-series
         :return: None
 
         TODO: Make work with list of time-series
         TODO: Make work with variable time-series lengths
         TODO: Make work with AxB input array instead of AxBx1 by doing it internally
         """
+
+        num_trials = input_time_series.shape[0]
 
         # Carry out inversion if option is selected
         if invert_target:
@@ -469,13 +525,17 @@ class DiscreteEchoStateNetwork:
 
         elif (len(input_time_series.shape) == 4) and (len(target_output.shape) == 4):
             if cuts is None:
-                cuts = [0 for i in range(input_time_series.shape[0])]
+                cuts = [0 for i in range(num_trials)]
 
         else:
             raise NotImplementedError("input and target must have same number"
                                       " of dimensions (either 3 or 4)")
 
-        num_trials = input_time_series.shape[0]
+        if cut_output:
+            output_cut = cuts
+        else:
+            output_cut = [0 for i in range(num_trials)]
+
         # This is time-series length following the cut and after stacking
         stacked_time_series_length = np.sum([input_time_series[i].shape[0] - cuts[i]
                                              for i in range(num_trials)])
@@ -494,8 +554,7 @@ class DiscreteEchoStateNetwork:
         # axis of the stacked array
         for trial_num in range(num_trials):
             # make sure recording is set to True, necessary for training and run trial
-            self.record = True
-            self.run(input_time_series[trial_num])
+            self.run(input_time_series[trial_num], record=True)
 
             # Cut history and fill the full history
             cut_history = self.history[cuts[trial_num]:]  # CxNx1
@@ -519,9 +578,9 @@ class DiscreteEchoStateNetwork:
         stacked_target_output = np.zeros((stacked_time_series_length, num_outputs),
                                          dtype=self.dtype)  # SxO
         for trial_num in range(num_trials):
-            cut_target_output = target_output[trial_num][cuts[trial_num]:]  # CxOx1
-            stacked_target_output[index(target_output, trial_num, cuts):
-                                  index(target_output, trial_num + 1, cuts),
+            cut_target_output = target_output[trial_num][output_cut[trial_num]:]  # CxOx1
+            stacked_target_output[index(target_output, trial_num, output_cut):
+                                  index(target_output, trial_num + 1, output_cut),
                                   :] = np.squeeze(cut_target_output, axis=2)
 
         # Run regression and then set the ESN output weights
@@ -530,27 +589,6 @@ class DiscreteEchoStateNetwork:
         solution, residuals, rank, sing = linalg.lstsq(stacked_full_history,
                                                        stacked_target_output)
         self.set_output_weights(solution)
-
-    def normalize_root_mean_squared_error(self, residuals, ymax, ymin):
-        """
-        :param residuals: a numpy array of the difference between target and
-            model. THIS ARRAY IS MODIFIED IN PLACE
-        :param ymax: largest observed value
-        :param ymin: smallest observed value
-        :return: NRMSE
-        """
-        np.power(residuals, 2, out=residuals)
-        return np.sqrt(np.mean(residuals)) / (ymax - ymin)
-
-    def absolute_error(self, residuals):
-        """
-        :param residuals: a numpy array of the difference between target and
-            model. THIS ARRAY IS MODIFIED IN PLACE
-        :return: AE
-        """
-
-        np.absolute(residuals, out=residuals)
-        return np.sum(residuals)
 
     def predict(self, input_time_series, target_output, cut=0,
                 target_range=None, error_type='NRMSE', analysis_mode=False):
@@ -591,17 +629,40 @@ class DiscreteEchoStateNetwork:
                 min_target = np.min(cut_target_output)
                 max_target = np.max(cut_target_output)
 
-            performance = self.normalize_root_mean_squared_error(residuals,
-                                                                 max_target,
-                                                                 min_target)
+            performance = normalize_root_mean_squared_error(residuals,
+                                                            max_target,
+                                                            min_target)
 
         elif error_type == 'AE':
-            performance = self.absolute_error(residuals)
+            performance = absolute_error(residuals)
 
         if analysis_mode:
             return performance, cut_prediction, target_output, prediction
         else:
             return performance
+
+
+def normalize_root_mean_squared_error(residuals, ymax, ymin):
+    """
+    :param residuals: a numpy array of the difference between target and
+        model. THIS ARRAY IS MODIFIED IN PLACE
+    :param ymax: largest observed value
+    :param ymin: smallest observed value
+    :return: NRMSE
+    """
+    np.power(residuals, 2, out=residuals)
+    return np.sqrt(np.mean(residuals)) / (ymax - ymin)
+
+
+def absolute_error(residuals):
+    """
+    :param residuals: a numpy array of the difference between target and
+        model. THIS ARRAY IS MODIFIED IN PLACE
+    :return: AE
+    """
+
+    np.absolute(residuals, out=residuals)
+    return np.sum(residuals)
 
 
 if __name__ == '__main__':
